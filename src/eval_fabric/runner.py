@@ -415,11 +415,19 @@ class Runner:
                 finished_at=finished,
                 error=error,
             )
-        # Re-stamp run_id and trace_id; leave score/rationale/cost intact.
+        score: float | bool | str | dict[str, Any] = raw.score
+        rationale = raw.rationale
+        if raw.error:
+            score = {"error": raw.error}
+            rationale = rationale or raw.error
+
+        # Re-stamp run_id and trace_id; leave successful score/cost intact.
         return raw.model_copy(
             update={
                 "run_id": self.run_id,
                 "trace_id": trace.id,
+                "score": score,
+                "rationale": rationale,
                 "cache_key": _cache_key(judge, trace, raw, item_hash=trace.input.content_hash()),
             }
         )

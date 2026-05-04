@@ -22,6 +22,9 @@ from eval_fabric.models import (
 )
 from eval_fabric.registry import register_judge
 
+PENDING_RUN_ID = "run_pending"
+PENDING_TRACE_ID = "trc_pending"
+
 
 @runtime_checkable
 class Judge(Protocol):
@@ -107,13 +110,13 @@ def _coerce_judgment(
     determinism: Determinism,
     started_at: Any,
     finished_at: Any,
-    run_id: RunId = "",
-    trace_id: TraceId = "",
+    run_id: RunId = PENDING_RUN_ID,
+    trace_id: TraceId = PENDING_TRACE_ID,
 ) -> Judgment:
     """Coerce a judge function's return value into a Judgment.
 
-    The runner re-stamps `run_id` and `trace_id` after the call, so we leave
-    them blank here unless the judge author supplied them explicitly.
+    The runner re-stamps `run_id` and `trace_id` after the call. Pending IDs
+    keep standalone judge calls valid before a runner attaches real IDs.
     """
 
     if isinstance(raw, Judgment):

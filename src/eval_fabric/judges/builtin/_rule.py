@@ -11,7 +11,7 @@ import json
 import re
 from typing import Any, Pattern
 
-from eval_fabric.judges import _coerce_judgment
+from eval_fabric.judges import PENDING_RUN_ID, PENDING_TRACE_ID, _coerce_judgment
 from eval_fabric.models import (
     Determinism,
     EvalItem,
@@ -61,8 +61,8 @@ class RuleBasedJudge:
         finished = utcnow()
         return Judgment(
             id=new_id("jdg"),
-            run_id="",
-            trace_id="",
+            run_id=PENDING_RUN_ID,
+            trace_id=PENDING_TRACE_ID,
             judge_id=self.id,
             judge_version=self.version,
             score=score,
