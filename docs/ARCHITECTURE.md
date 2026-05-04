@@ -122,7 +122,7 @@ class EvalSpec(BaseModel):
     evaluator: EvaluatorRef
     judges: list[JudgeRef]
     scoring: ScoringConfig
-    runtime: RuntimeConfig           # concurrency, timeouts, retries
+    runtime: RuntimeConfig           # concurrency, timeouts, retries, trace_store
     metadata: dict[str, str]         # team-defined, opaque to the framework
 ```
 

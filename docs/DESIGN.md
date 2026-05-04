@@ -181,11 +181,11 @@ class EvalSpec(BaseModel):
 
 
 class RuntimeConfig(BaseModel):
-    max_concurrent: PositiveInt = 64
-    task_timeout_seconds: PositiveFloat = 60.0
-    max_retries: NonNegativeInt = 2
-    retry_on: tuple[type[Exception], ...] = (TransientError,)
+    max_concurrent: int = 64
+    task_timeout_seconds: float = 60.0
+    max_retries: int = 2
     on_failure: Literal["skip", "abort"] = "skip"
+    trace_store: str = "sqlite:///./runs/runs.db"
 
 
 class EvaluatorRef(BaseModel):
