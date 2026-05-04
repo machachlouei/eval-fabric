@@ -158,6 +158,56 @@ async def test_on_failure_abort_raises() -> None:
         await runner.run_async()
 
 
+async def test_judge_error_marks_task_error_and_excludes_metric() -> None:
+    @evaluator(id="test.evaluator", version="1.0.0")
+    async def passthrough(item: EvalItem) -> EvaluatorOutput:
+        return EvaluatorOutput(output=item.input)
+
+    @judge(id="test.judge", version="1.0.0", determinism=Determinism.DETERMINISTIC)
+    async def broken_judge(item: EvalItem, output: EvaluatorOutput):
+        raise RuntimeError("judge unavailable")
+
+    store = InMemoryTraceStore()
+    spec = _build_spec()
+    runner = Runner(spec=spec, dataset=_items(1), trace_store=store)
+    result = await runner.run_async()
+
+    assert result.status == "completed"  # on_failure="skip"
+    assert result.counts["error"] == 1
+    assert result.counts["ok"] == 0
+    assert result.metrics[0].n == 0
+    assert result.metrics[0].value == pytest.approx(0.0)
+
+    trace = next(iter(store.traces.values()))
+    judgment = next(iter(store.judgments.values()))
+    assert trace.status == "error"
+    assert "judge unavailable" in (trace.error or "")
+    assert judgment.error == "judge unavailable"
+    assert judgment.score == {"error": "judge unavailable"}
+
+
+async def test_judge_error_triggers_on_failure_abort() -> None:
+    @evaluator(id="test.evaluator", version="1.0.0")
+    async def passthrough(item: EvalItem) -> EvaluatorOutput:
+        return EvaluatorOutput(output=item.input)
+
+    @judge(id="test.judge", version="1.0.0", determinism=Determinism.DETERMINISTIC)
+    async def broken_judge(item: EvalItem, output: EvaluatorOutput):
+        raise RuntimeError("judge unavailable")
+
+    store = InMemoryTraceStore()
+    spec = _build_spec(on_failure="abort")
+    runner = Runner(spec=spec, dataset=_items(1), trace_store=store)
+
+    with pytest.raises(RunAborted):
+        await runner.run_async()
+
+    run = next(iter(store.runs.values()))
+    assert run.status == "aborted"
+    assert run.counts["error"] == 1
+    assert "judge unavailable" in (run.error or "")
+
+
 async def test_persist_before_complete() -> None:
     """Once a task counts as ok, its trace and judgments are durable.
 

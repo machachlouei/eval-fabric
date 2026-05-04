@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, AsyncIterable, Iterable
+from typing import Any, AsyncIterable, Iterable, cast
 
 import anyio
 
@@ -34,6 +34,7 @@ from eval_fabric.models import (
     RunResult,
     Span,
     Trace,
+    TraceStatus,
     new_id,
     utcnow,
 )
@@ -267,14 +268,6 @@ class Runner:
                 duration_ms,
                 attributes={"evaluator_id": getattr(evaluator, "id", "<unknown>")},
             )
-            inst.tasks_completed.add(
-                1,
-                attributes={
-                    "status": status,
-                    "evaluator_id": getattr(evaluator, "id", "<unknown>"),
-                },
-            )
-
             trace = Trace(
                 id=trace_id,
                 run_id=self.run_id,
@@ -295,9 +288,22 @@ class Runner:
                 # Failed evaluator calls do not produce judgments; the trace's
                 # own status carries the diagnosis. The runner consults
                 # `on_failure` after the whole task group finishes.
+                _record_task_completed(inst, trace)
                 return trace, []
 
             judgments = await self._run_judges(item=item, output=output, trace=trace, inst=inst)
+            judge_errors = [j for j in judgments if j.error]
+            if judge_errors:
+                error_summary = "; ".join(
+                    f"{j.judge_id}: {j.error}" for j in judge_errors
+                )
+                trace = trace.model_copy(
+                    update={
+                        "status": cast(TraceStatus, "error"),
+                        "error": f"judge failure(s): {error_summary}",
+                    }
+                )
+            _record_task_completed(inst, trace)
             return trace, judgments
 
     async def _run_judges(
@@ -402,8 +408,8 @@ class Runner:
                 trace_id=trace.id,
                 judge_id=judge.id,
                 judge_version=judge.version,
-                score=0.0,
-                rationale=None,
+                score={"error": error or "judge failed"},
+                rationale=error,
                 determinism=judge.determinism,
                 started_at=started,
                 finished_at=finished,
@@ -454,3 +460,13 @@ def _cache_key(judge: Judge, trace: Trace, judgment: Judgment, *, item_hash: str
         return None
     output_hash = trace.output.content_hash() if trace.output is not None else "no-output"
     return f"{judge.id}@{judge.version}|item={item_hash}|out={output_hash}"
+
+
+def _record_task_completed(inst: Any, trace: Trace) -> None:
+    inst.tasks_completed.add(
+        1,
+        attributes={
+            "status": trace.status,
+            "evaluator_id": trace.evaluator_id,
+        },
+    )
