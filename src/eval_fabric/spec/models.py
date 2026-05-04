@@ -8,9 +8,18 @@ must update the migration chain — see ADR-0004.
 from __future__ import annotations
 
 import re
-from typing import Annotated, Any, Literal
+from collections.abc import Mapping
+from types import MappingProxyType
+from typing import Annotated, Any, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_serializer,
+    field_validator,
+)
 
 from eval_fabric.errors import SpecValidationError
 
@@ -23,6 +32,25 @@ _ID_RE = re.compile(r"^[a-zA-Z0-9_]+(?:[./-][a-zA-Z0-9_]+)*$")
 
 SpecId = Annotated[str, StringConstraints(min_length=1, max_length=200)]
 SemVer = Annotated[str, StringConstraints(min_length=5, max_length=64)]
+FrozenConfig = Mapping[str, Any]
+
+
+def _freeze(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return MappingProxyType({k: _freeze(v) for k, v in value.items()})
+    if isinstance(value, list | tuple):
+        return tuple(_freeze(v) for v in value)
+    if isinstance(value, set | frozenset):
+        return frozenset(_freeze(v) for v in value)
+    return value
+
+
+def _thaw(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {k: _thaw(v) for k, v in value.items()}
+    if isinstance(value, tuple | frozenset):
+        return [_thaw(v) for v in value]
+    return value
 
 
 class RuntimeConfig(BaseModel):
@@ -47,7 +75,7 @@ class EvaluatorRef(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: str
-    config: dict[str, Any] = Field(default_factory=dict)
+    config: FrozenConfig = Field(default_factory=dict)
 
     @field_validator("id")
     @classmethod
@@ -58,6 +86,15 @@ class EvaluatorRef(BaseModel):
                 "(allowed: alphanumerics, underscores, '.', '/', '-')"
             )
         return v
+
+    @field_validator("config", mode="after")
+    @classmethod
+    def _freeze_config(cls, v: FrozenConfig) -> FrozenConfig:
+        return cast(FrozenConfig, _freeze(v))
+
+    @field_serializer("config")
+    def _serialize_config(self, v: FrozenConfig) -> dict[str, Any]:
+        return cast(dict[str, Any], _thaw(v))
 
 
 class JudgeRef(BaseModel):
@@ -70,7 +107,7 @@ class JudgeRef(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: str
-    config: dict[str, Any] = Field(default_factory=dict)
+    config: FrozenConfig = Field(default_factory=dict)
     weight: float = Field(default=1.0, ge=0.0)
 
     @field_validator("id")
@@ -82,6 +119,15 @@ class JudgeRef(BaseModel):
                 "(allowed: alphanumerics, underscores, '.', '/', '-')"
             )
         return v
+
+    @field_validator("config", mode="after")
+    @classmethod
+    def _freeze_config(cls, v: FrozenConfig) -> FrozenConfig:
+        return cast(FrozenConfig, _freeze(v))
+
+    @field_serializer("config")
+    def _serialize_config(self, v: FrozenConfig) -> dict[str, Any]:
+        return cast(dict[str, Any], _thaw(v))
 
 
 class MetricSpec(BaseModel):
@@ -114,7 +160,7 @@ class ScoringConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    metrics: list[MetricSpec]
+    metrics: tuple[MetricSpec, ...]
     baseline_run_id: str | None = None
 
 
@@ -133,10 +179,10 @@ class EvalSpec(BaseModel):
     version: SemVer
     description: str = ""
     evaluator: EvaluatorRef
-    judges: list[JudgeRef] = Field(min_length=1)
+    judges: tuple[JudgeRef, ...] = Field(min_length=1)
     scoring: ScoringConfig
     runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
-    metadata: dict[str, str] = Field(default_factory=dict)
+    metadata: Mapping[str, str] = Field(default_factory=dict)
 
     @field_validator("version")
     @classmethod
@@ -153,6 +199,15 @@ class EvalSpec(BaseModel):
                 f"spec id={v!r} is not a valid identifier (use 'team/name' or 'team.name' form)"
             )
         return v
+
+    @field_validator("metadata", mode="after")
+    @classmethod
+    def _freeze_metadata(cls, v: Mapping[str, str]) -> Mapping[str, str]:
+        return cast(Mapping[str, str], _freeze(v))
+
+    @field_serializer("metadata")
+    def _serialize_metadata(self, v: Mapping[str, str]) -> dict[str, str]:
+        return dict(v)
 
 
 def validate_spec(data: dict[str, Any]) -> EvalSpec:

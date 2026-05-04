@@ -7,6 +7,8 @@ the helper" — ``docs/testing.md`` explains the philosophy.
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 import pytest
 
 from eval_fabric.errors import SpecValidationError
@@ -37,6 +39,33 @@ def test_eval_spec_is_immutable() -> None:
     spec = load_spec(dict(_VALID_SPEC))
     with pytest.raises(Exception):
         spec.id = "different"  # type: ignore[misc]
+
+
+def test_eval_spec_containers_are_immutable() -> None:
+    data = deepcopy(_VALID_SPEC)
+    data["evaluator"] = {
+        "id": "team.qa_bot",
+        "config": {"model": "alpha", "params": {"temperature": 0}},
+    }
+    data["judges"] = [
+        {
+            "id": "eval_fabric.exact_match",
+            "config": {"labels": ["yes", "no"]},
+        }
+    ]
+    data["metadata"] = {"owner": "eval-infra"}
+    spec = load_spec(data)
+
+    with pytest.raises(Exception):
+        spec.judges.append(spec.judges[0])  # type: ignore[attr-defined]
+    with pytest.raises(TypeError):
+        spec.evaluator.config["model"] = "beta"
+    with pytest.raises(TypeError):
+        spec.evaluator.config["params"]["temperature"] = 1
+    with pytest.raises(TypeError):
+        spec.judges[0].config["labels"] += ("maybe",)
+    with pytest.raises(TypeError):
+        spec.metadata["owner"] = "platform"
 
 
 def test_unknown_field_is_rejected() -> None:
