@@ -61,6 +61,7 @@ ef = "eval_fabric.cli:main"
 "eval_fabric.regex" = "eval_fabric.judges.builtin:regex_judge"
 "eval_fabric.json_schema" = "eval_fabric.judges.builtin:json_schema_judge"
 "eval_fabric.identity" = "eval_fabric.judges.builtin:identity_judge"
+"eval_fabric.human" = "eval_fabric.judges.builtin:human_judge_factory"
 
 [project.entry-points."eval_fabric.tracestore.backends"]
 sqlite = "eval_fabric.tracestore.sqlite:SQLiteTraceStore"

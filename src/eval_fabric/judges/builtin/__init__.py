@@ -4,6 +4,7 @@ These are deterministic by design and do not call out to LLMs. They cover the
 "sanity check" tier of evaluations and are what the example specs reference.
 """
 
+from eval_fabric.judges.builtin._human import HumanJudge, human_judge_factory
 from eval_fabric.judges.builtin._llm import LLMJudge, llm_judge_factory
 from eval_fabric.judges.builtin._rule import (
     RuleBasedJudge,
@@ -14,9 +15,11 @@ from eval_fabric.judges.builtin._rule import (
 )
 
 __all__ = [
+    "HumanJudge",
     "LLMJudge",
     "RuleBasedJudge",
     "exact_match_judge",
+    "human_judge_factory",
     "identity_judge",
     "json_schema_judge",
     "llm_judge_factory",
