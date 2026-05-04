@@ -11,6 +11,8 @@ from typing import Any, Awaitable, Callable, Protocol, runtime_checkable
 
 from eval_fabric.models import EvalItem, EvaluatorOutput
 from eval_fabric.registry import register_evaluator
+from eval_fabric.evaluators.retry import retry
+from eval_fabric.evaluators.rate_limit import RateLimiter
 
 
 @runtime_checkable
@@ -72,4 +74,6 @@ __all__ = [
     "Evaluator",
     "EvaluatorOutput",
     "evaluator",
+    "retry",
+    "RateLimiter",
 ]

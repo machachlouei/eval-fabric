@@ -12,8 +12,8 @@ import pytest
 
 from eval_fabric.errors import RunAborted, TransientError
 from eval_fabric.evaluators import evaluator
-from eval_fabric.judges import judge
-from eval_fabric.models import Determinism, EvalItem, EvaluatorOutput
+from eval_fabric.judges import judge, _coerce_judgment
+from eval_fabric.models import Determinism, EvalItem, EvaluatorOutput, utcnow
 from eval_fabric.registry import register_evaluator, register_judge
 from eval_fabric.runner import Runner
 from eval_fabric.spec.models import (
@@ -139,7 +139,15 @@ async def test_judge_factory_is_resolved_once_per_run() -> None:
 
         async def judge(self, item: EvalItem, output: EvaluatorOutput):
             self.calls += 1
-            return True
+            started = utcnow()
+            return _coerce_judgment(
+                True,
+                judge_id=self.id,
+                judge_version=self.version,
+                determinism=self.determinism,
+                started_at=started,
+                finished_at=utcnow(),
+            )
 
     factory_calls = 0
     instance = StatefulJudge()
