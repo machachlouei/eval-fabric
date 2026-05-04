@@ -3,7 +3,7 @@
 > A pluggable evaluation orchestration framework for LLM and agentic systems.
 > One contract, many evaluators, async by default.
 
-[![CI](https://img.shields.io/badge/ci-pending-lightgrey)]()
+[![CI](https://github.com/machachlouei/eval-fabric/actions/workflows/ci.yml/badge.svg)](https://github.com/machachlouei/eval-fabric/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)]()
 [![Status](https://img.shields.io/badge/status-alpha-orange)]()
