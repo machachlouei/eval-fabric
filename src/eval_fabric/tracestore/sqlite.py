@@ -42,6 +42,7 @@ class SQLiteTraceStore:
         # An empty path means the canonical default location.
         self._path = str(path) if str(path) else "./runs/runs.db"
         self._conn: sqlite3.Connection | None = None
+        self._lock = threading.RLock()
 
     # -- Lifecycle ----------------------------------------------------
 
@@ -51,17 +52,18 @@ class SQLiteTraceStore:
         await anyio.to_thread.run_sync(self._open_sync)
 
     def _open_sync(self) -> None:
-        if self._conn is not None:
-            return
-        path = Path(self._path)
-        if path.parent and str(path.parent) not in ("", "."):
-            path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self._path, isolation_level=None, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL;")
-        conn.execute("PRAGMA synchronous=NORMAL;")
-        self._init_schema(conn)
-        self._conn = conn
+        with self._lock:
+            if self._conn is not None:
+                return
+            path = Path(self._path)
+            if path.parent and str(path.parent) not in ("", "."):
+                path.parent.mkdir(parents=True, exist_ok=True)
+            conn = sqlite3.connect(self._path, isolation_level=None, check_same_thread=False)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA synchronous=NORMAL;")
+            self._init_schema(conn)
+            self._conn = conn
 
     def _init_schema(self, conn: sqlite3.Connection) -> None:
         conn.execute(
@@ -116,11 +118,15 @@ class SQLiteTraceStore:
         )
 
     async def close(self) -> None:
-        if self._conn is None:
-            return
-        conn = self._conn
-        self._conn = None
-        await anyio.to_thread.run_sync(conn.close)
+        await anyio.to_thread.run_sync(self._close_sync)
+
+    def _close_sync(self) -> None:
+        with self._lock:
+            if self._conn is None:
+                return
+            conn = self._conn
+            self._conn = None
+            conn.close()
 
     # -- Writes -------------------------------------------------------
 
@@ -129,62 +135,65 @@ class SQLiteTraceStore:
         return run.id
 
     def _put_run_sync(self, run: RunResult) -> None:
-        conn = self._require_conn()
-        conn.execute(
-            "INSERT OR REPLACE INTO runs "
-            "(id, spec_id, spec_version, status, started_at, finished_at, payload) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (
-                run.id,
-                run.spec_id,
-                run.spec_version,
-                run.status,
-                run.started_at.isoformat(),
-                run.finished_at.isoformat() if run.finished_at else None,
-                run.model_dump_json(),
-            ),
-        )
+        with self._lock:
+            conn = self._require_conn()
+            conn.execute(
+                "INSERT OR REPLACE INTO runs "
+                "(id, spec_id, spec_version, status, started_at, finished_at, payload) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    run.id,
+                    run.spec_id,
+                    run.spec_version,
+                    run.status,
+                    run.started_at.isoformat(),
+                    run.finished_at.isoformat() if run.finished_at else None,
+                    run.model_dump_json(),
+                ),
+            )
 
     async def put_trace(self, trace: Trace) -> TraceId:
         await anyio.to_thread.run_sync(self._put_trace_sync, trace)
         return trace.id
 
     def _put_trace_sync(self, trace: Trace) -> None:
-        conn = self._require_conn()
-        conn.execute(
-            "INSERT OR REPLACE INTO traces "
-            "(id, run_id, item_id, evaluator_id, status, started_at, payload) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (
-                trace.id,
-                trace.run_id,
-                trace.item_id,
-                trace.evaluator_id,
-                trace.status,
-                trace.started_at.isoformat(),
-                trace.model_dump_json(),
-            ),
-        )
+        with self._lock:
+            conn = self._require_conn()
+            conn.execute(
+                "INSERT OR REPLACE INTO traces "
+                "(id, run_id, item_id, evaluator_id, status, started_at, payload) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    trace.id,
+                    trace.run_id,
+                    trace.item_id,
+                    trace.evaluator_id,
+                    trace.status,
+                    trace.started_at.isoformat(),
+                    trace.model_dump_json(),
+                ),
+            )
 
     async def put_judgment(self, judgment: Judgment) -> JudgmentId:
         await anyio.to_thread.run_sync(self._put_judgment_sync, judgment)
         return judgment.id
 
     def _put_judgment_sync(self, j: Judgment) -> None:
-        conn = self._require_conn()
-        conn.execute(
-            "INSERT OR REPLACE INTO judgments "
-            "(id, run_id, trace_id, judge_id, determinism, payload) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (
-                j.id,
-                j.run_id,
-                j.trace_id,
-                j.judge_id,
-                j.determinism.value,
-                j.model_dump_json(),
-            ),
-        )
+        with self._lock:
+            conn = self._require_conn()
+            conn.execute(
+                "INSERT OR REPLACE INTO judgments "
+                "(id, run_id, trace_id, judge_id, determinism, payload) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    j.id,
+                    j.run_id,
+                    j.trace_id,
+                    j.judge_id,
+                    j.determinism.value,
+                    j.model_dump_json(),
+                ),
+            )
 
     # -- Reads --------------------------------------------------------
 
@@ -201,11 +210,12 @@ class SQLiteTraceStore:
         return Trace.model_validate_json(row["payload"])
 
     def _fetch_one(self, table: str, id_value: str) -> Any:
-        conn = self._require_conn()
-        return conn.execute(
-            f"SELECT payload FROM {table} WHERE id = ?",
-            (id_value,),
-        ).fetchone()
+        with self._lock:
+            conn = self._require_conn()
+            return conn.execute(
+                f"SELECT payload FROM {table} WHERE id = ?",
+                (id_value,),
+            ).fetchone()
 
     async def query_judgments(self, run_id: RunId) -> AsyncIterator[Judgment]:
         rows = await anyio.to_thread.run_sync(self._fetch_judgments, run_id)
@@ -213,12 +223,13 @@ class SQLiteTraceStore:
             yield Judgment.model_validate_json(payload)
 
     def _fetch_judgments(self, run_id: RunId) -> list[str]:
-        conn = self._require_conn()
-        cur = conn.execute(
-            "SELECT payload FROM judgments WHERE run_id = ? ORDER BY id",
-            (run_id,),
-        )
-        return [row["payload"] for row in cur.fetchall()]
+        with self._lock:
+            conn = self._require_conn()
+            cur = conn.execute(
+                "SELECT payload FROM judgments WHERE run_id = ? ORDER BY id",
+                (run_id,),
+            )
+            return [row["payload"] for row in cur.fetchall()]
 
     async def query_traces(self, run_id: RunId) -> AsyncIterator[Trace]:
         rows = await anyio.to_thread.run_sync(self._fetch_traces, run_id)
@@ -226,12 +237,13 @@ class SQLiteTraceStore:
             yield Trace.model_validate_json(payload)
 
     def _fetch_traces(self, run_id: RunId) -> list[str]:
-        conn = self._require_conn()
-        cur = conn.execute(
-            "SELECT payload FROM traces WHERE run_id = ? ORDER BY started_at",
-            (run_id,),
-        )
-        return [row["payload"] for row in cur.fetchall()]
+        with self._lock:
+            conn = self._require_conn()
+            cur = conn.execute(
+                "SELECT payload FROM traces WHERE run_id = ? ORDER BY started_at",
+                (run_id,),
+            )
+            return [row["payload"] for row in cur.fetchall()]
 
     # -- Internal -----------------------------------------------------
 

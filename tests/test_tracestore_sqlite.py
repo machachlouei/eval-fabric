@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import anyio
 import pytest
 
 from eval_fabric.errors import TraceStoreError
@@ -99,6 +100,33 @@ async def test_durability_across_opens(tmp_path: Path) -> None:
     fetched = await store2.get_run("run_b")
     assert fetched.id == "run_b"
     await store2.close()
+
+
+async def test_concurrent_writes_are_serialized(tmp_path: Path) -> None:
+    store = SQLiteTraceStore(tmp_path / "concurrent.db")
+    await store.open()
+    await store.put_run(_run("run_concurrent"))
+
+    async def write_item(i: int) -> None:
+        trace = _trace("run_concurrent", item_id=f"item-{i}")
+        await store.put_trace(trace)
+        await store.put_judgment(_judgment("run_concurrent", trace.id))
+
+    async with anyio.create_task_group() as tg:
+        for i in range(50):
+            tg.start_soon(write_item, i)
+
+    traces: list[Trace] = []
+    async for trace in store.query_traces("run_concurrent"):
+        traces.append(trace)
+
+    judgments: list[Judgment] = []
+    async for judgment in store.query_judgments("run_concurrent"):
+        judgments.append(judgment)
+
+    assert len(traces) == 50
+    assert len(judgments) == 50
+    await store.close()
 
 
 async def test_get_unknown_raises(tmp_path: Path) -> None:
