@@ -46,9 +46,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-org/eval-fabric"
-Documentation = "https://github.com/your-org/eval-fabric/tree/main/docs"
-Issues = "https://github.com/your-org/eval-fabric/issues"
+Homepage = "https://github.com/machachlouei/eval-fabric"
+Documentation = "https://github.com/machachlouei/eval-fabric/tree/main/docs"
+Issues = "https://github.com/machachlouei/eval-fabric/issues"
 
 [project.scripts]
 ef = "eval_fabric.cli:main"
