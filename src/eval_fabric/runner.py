@@ -291,7 +291,13 @@ class Runner:
                 _record_task_completed(inst, trace)
                 return trace, []
 
-            judgments = await self._run_judges(item=item, output=output, trace=trace, inst=inst)
+            judgments = await self._run_judges(
+                item=item,
+                output=output,
+                trace=trace,
+                judges=judges,
+                inst=inst,
+            )
             judge_errors = [j for j in judgments if j.error]
             if judge_errors:
                 error_summary = "; ".join(
@@ -312,11 +318,11 @@ class Runner:
         item: EvalItem,
         output: EvaluatorOutput,
         trace: Trace,
+        judges: list[Judge],
         inst: Any,
     ) -> list[Judgment]:
         judgments: list[Judgment] = []
-        for judge_ref in self.spec.judges:
-            judge = get_judge(judge_ref.id, config=judge_ref.config)
+        for judge in judges:
             with otel_span(
                 f"eval.judge.{judge.id}",
                 attributes={

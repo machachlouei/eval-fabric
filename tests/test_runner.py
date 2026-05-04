@@ -124,6 +124,43 @@ async def test_retry_on_transient_error() -> None:
     assert attempts["count"] == 3
 
 
+async def test_judge_factory_is_resolved_once_per_run() -> None:
+    @evaluator(id="test.evaluator", version="1.0.0")
+    async def passthrough(item: EvalItem) -> EvaluatorOutput:
+        return EvaluatorOutput(output=item.input)
+
+    class StatefulJudge:
+        id = "test.judge"
+        version = "1.0.0"
+        determinism = Determinism.DETERMINISTIC
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def judge(self, item: EvalItem, output: EvaluatorOutput):
+            self.calls += 1
+            return True
+
+    factory_calls = 0
+    instance = StatefulJudge()
+
+    def judge_factory() -> StatefulJudge:
+        nonlocal factory_calls
+        factory_calls += 1
+        return instance
+
+    register_judge("test.judge", judge_factory)
+
+    store = InMemoryTraceStore()
+    spec = _build_spec()
+    runner = Runner(spec=spec, dataset=_items(4), trace_store=store)
+    result = await runner.run_async()
+
+    assert result.counts["ok"] == 4
+    assert factory_calls == 1
+    assert instance.calls == 4
+
+
 async def test_non_retryable_error_marks_trace_error() -> None:
     @evaluator(id="test.evaluator", version="1.0.0")
     async def broken(item: EvalItem) -> EvaluatorOutput:
