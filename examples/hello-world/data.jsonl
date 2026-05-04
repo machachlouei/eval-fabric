@@ -1,0 +1,3 @@
+{"item_id": "item-1", "input": "hello", "reference_output": "hello"}
+{"item_id": "item-2", "input": "world", "reference_output": "world"}
+{"item_id": "item-3", "input": "eval-fabric", "reference_output": "eval-fabric"}

@@ -1,0 +1,19 @@
+schema_version: '1'
+id: examples/hello-world
+version: 0.1.0
+description: |
+  Minimal end-to-end example. The echo evaluator returns its input verbatim;
+  the exact-match judge compares it against the gold reference. A run should
+  always score 1.0 — useful as a smoke test of an install.
+evaluator:
+  id: eval_fabric.examples.echo
+judges:
+  - id: eval_fabric.exact_match
+scoring:
+  metrics:
+    - name: accuracy
+      from: judges
+      aggregator: mean
+runtime:
+  max_concurrent: 4
+  trace_store: sqlite:///./runs/runs.db
