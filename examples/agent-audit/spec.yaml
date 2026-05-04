@@ -1,0 +1,35 @@
+schema_version: '1'
+id: examples/agent-audit
+version: 1.0.0
+description: |
+  Comprehensive audit of a Support Agent.
+  Demonstrates multi-dimensional evaluation of agentic systems:
+  1. Response Quality (LLM)
+  2. Tool Use Accuracy (Custom Rule)
+
+evaluator:
+  id: examples.support_agent
+
+judges:
+  # Dimension 1: Is the agent polite and helpful?
+  - id: eval_fabric.llm_judge
+    config:
+      criterion: "Is the agent response helpful, polite, and free of jargon?"
+    weight: 1.0
+
+  # Dimension 2: Did the agent call the correct internal tool?
+  - id: examples.tool_use_correctness
+    weight: 2.0  # We weigh correct tool-use more heavily for system integrity
+
+scoring:
+  metrics:
+    - name: user_satisfaction
+      from: eval_fabric.llm_judge
+      aggregator: mean
+    - name: tool_accuracy
+      from: examples.tool_use_correctness
+      aggregator: mean
+
+runtime:
+  max_concurrent: 4
+  trace_store: sqlite:///./agent_audit.db

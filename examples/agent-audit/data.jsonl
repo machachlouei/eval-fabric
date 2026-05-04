@@ -1,0 +1,3 @@
+{"item_id": "req-001", "input": "Where is my order?", "metadata": {"expected_tool": "get_order_status"}}
+{"item_id": "req-002", "input": "I want a refund for my last purchase.", "metadata": {"expected_tool": "check_eligibility"}}
+{"item_id": "req-003", "input": "What is the weather like today?", "metadata": {"expected_tool": null}}
