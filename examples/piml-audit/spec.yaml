@@ -1,0 +1,40 @@
+schema_version: '1'
+id: examples/piml-audit
+version: 1.0.0
+description: |
+  Audit of PiML model explanations.
+  We test if the machine-generated explanations are rational and if
+  the model predictions stay within reasonable bounds.
+
+evaluator:
+  id: piml.explanation_generator
+
+judges:
+  # 1. LLM Judge to check the quality of the explanation text
+  - id: eval_fabric.llm_judge
+    config:
+      criterion: |
+        Assess the rationality of the model explanation based on the input features.
+        Does the explanation focus on relevant features (like income)?
+        Is it concise and professional?
+    weight: 1.0
+
+  # 2. Rule-Based Judge to check for outlier predictions
+  - id: eval_fabric.regex
+    config:
+      # Expecting MedInc to be a top contributor in the explanation string
+      pattern: "MedInc"
+    weight: 0.5
+
+scoring:
+  metrics:
+    - name: explanation_quality
+      from: eval_fabric.llm_judge
+      aggregator: mean
+    - name: robustness_check
+      from: eval_fabric.regex
+      aggregator: mean
+
+runtime:
+  max_concurrent: 2
+  trace_store: sqlite:///./piml_runs.db
